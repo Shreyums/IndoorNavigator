@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indoor Mapping and Navigation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+        }
+
+        header {
+            background-color: #007bff;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        main {
+            padding: 2rem;
+            max-width: 800px;
+            margin: auto;
+        }
+
+        canvas {
+            display: block;
+            margin: 1rem auto;
+            border: 1px solid #ccc;
+            background-color: white;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            margin: 0.5rem;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+        }
+
+        #status {
+            margin-top: 1rem;
+            font-size: 1rem;
+            color: #333;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Indoor Mapping and Navigation</h1>
+    </header>
+    <main>
+        <p>Use your mobile device's sensors to map your surroundings. Click "Start Scanning" to begin collecting data.</p>
+        <canvas id="mapCanvas" width="600" height="400"></canvas>
+        <div style="text-align: center;">
+            <button id="startButton">Start Scanning</button>
+            <button id="stopButton" disabled>Stop Scanning</button>
+        </div>
+        <div id="status">Status: Ready</div>
+    </main>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const statusDiv = document.getElementById('status');
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let isScanning = false;
+        let path = [];
+        let x = canvas.width / 2;
+        let y = canvas.height / 2;
+        let direction = 0; // Current direction in degrees
+
+        // Draw initial point
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(x - 2, y - 2, 4, 4);
+
+        function drawPath(newX, newY) {
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(newX, newY);
+            ctx.stroke();
+            x = newX;
+            y = newY;
+        }
+
+        function handleMotion(event) {
+            if (!isScanning) return;
+
+            const stepSize = 5; // Arbitrary step size for movement
+            const rad = direction * (Math.PI / 180);
+            const dx = stepSize * Math.cos(rad);
+            const dy = stepSize * Math.sin(rad);
+
+            const newX = x + dx;
+            const newY = y + dy;
+
+            drawPath(newX, newY);
+            path.push({ x: newX, y: newY });
+        }
+
+        function handleOrientation(event) {
+            if (!isScanning) return;
+            direction = event.alpha; // Use compass direction
+        }
+
+        startButton.addEventListener('click', () => {
+            if (!window.DeviceMotionEvent || !window.DeviceOrientationEvent) {
+                statusDiv.textContent = 'Error: Device sensors are not supported on this browser.';
+                return;
+            }
+
+            isScanning = true;
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            statusDiv.textContent = 'Status: Scanning...';
+
+            window.addEventListener('devicemotion', handleMotion);
+            window.addEventListener('deviceorientation', handleOrientation);
+        });
+
+        stopButton.addEventListener('click', () => {
+            isScanning = false;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            statusDiv.textContent = 'Status: Stopped. Path data recorded.';
+
+            window.removeEventListener('devicemotion', handleMotion);
+            window.removeEventListener('deviceorientation', handleOrientation);
+
+            console.log('Recorded Path:', path);
+        });
+    </script>
+</body>
+</html>
