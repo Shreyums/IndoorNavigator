@@ -104,16 +104,25 @@
             y = newY;
         }
 
+        function smoothCoordinates(lat, lon) {
+            if (path.length === 0) return { x: x + lon * 1000, y: y - lat * 1000 };
+
+            const lastPoint = path[path.length - 1];
+            const smoothX = lastPoint.x + (lon * 1000 - lastPoint.x) * 0.1;
+            const smoothY = lastPoint.y + (-lat * 1000 - lastPoint.y) * 0.1;
+
+            return { x: smoothX, y: smoothY };
+        }
+
         function handlePosition(position) {
             if (!isScanning) return;
 
             const { latitude, longitude } = position.coords;
-            const newX = x + (longitude % 1) * 1000; // Scale longitude for visualization
-            const newY = y - (latitude % 1) * 1000; // Scale latitude for visualization
+            const smoothed = smoothCoordinates(latitude % 1, longitude % 1);
 
-            drawPath(newX, newY);
-            path.push({ x: newX, y: newY });
-            undoStack.push({ x: newX, y: newY });
+            drawPath(smoothed.x, smoothed.y);
+            path.push({ x: smoothed.x, y: smoothed.y, latitude, longitude });
+            undoStack.push({ x: smoothed.x, y: smoothed.y, latitude, longitude });
             redoStack = [];
 
             undoButton.disabled = false;
@@ -186,17 +195,18 @@
         });
 
         saveButton.addEventListener('click', () => {
-            const pathData = JSON.stringify(path);
-            const blob = new Blob([pathData], { type: 'application/json' });
+            const csvContent = "Latitude,Longitude,X,Y\n" +
+                path.map(p => `${p.latitude},${p.longitude},${p.x},${p.y}`).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
 
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'path.json';
+            a.download = 'path.csv';
             a.click();
             URL.revokeObjectURL(url);
 
-            statusDiv.textContent = 'Status: Path data saved.';
+            statusDiv.textContent = 'Status: Path data saved as CSV.';
         });
     </script>
 </body>
