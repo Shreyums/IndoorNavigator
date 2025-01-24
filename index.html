@@ -59,11 +59,14 @@
         <h1>Indoor Mapping and Navigation</h1>
     </header>
     <main>
-        <p>Use your mobile device's sensors to map your surroundings. Click "Start Scanning" to begin collecting data.</p>
+        <p>Use your mobile device's GPS to map your surroundings. Click "Start Scanning" to begin collecting data.</p>
         <canvas id="mapCanvas" width="600" height="400"></canvas>
         <div style="text-align: center;">
             <button id="startButton">Start Scanning</button>
             <button id="stopButton" disabled>Stop Scanning</button>
+            <button id="saveButton" disabled>Save</button>
+            <button id="undoButton" disabled>Undo</button>
+            <button id="redoButton" disabled>Redo</button>
         </div>
         <div id="status">Status: Ready</div>
     </main>
@@ -71,15 +74,20 @@
     <script>
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
+        const saveButton = document.getElementById('saveButton');
+        const undoButton = document.getElementById('undoButton');
+        const redoButton = document.getElementById('redoButton');
         const statusDiv = document.getElementById('status');
         const canvas = document.getElementById('mapCanvas');
         const ctx = canvas.getContext('2d');
 
         let isScanning = false;
         let path = [];
+        let undoStack = [];
+        let redoStack = [];
+
         let x = canvas.width / 2;
         let y = canvas.height / 2;
-        let direction = 0; // Current direction in degrees
 
         // Draw initial point
         ctx.fillStyle = 'blue';
@@ -96,29 +104,25 @@
             y = newY;
         }
 
-        function handleMotion(event) {
+        function handlePosition(position) {
             if (!isScanning) return;
 
-            const stepSize = 5; // Arbitrary step size for movement
-            const rad = direction * (Math.PI / 180);
-            const dx = stepSize * Math.cos(rad);
-            const dy = stepSize * Math.sin(rad);
-
-            const newX = x + dx;
-            const newY = y + dy;
+            const { latitude, longitude } = position.coords;
+            const newX = x + (longitude % 1) * 1000; // Scale longitude for visualization
+            const newY = y - (latitude % 1) * 1000; // Scale latitude for visualization
 
             drawPath(newX, newY);
             path.push({ x: newX, y: newY });
-        }
+            undoStack.push({ x: newX, y: newY });
+            redoStack = [];
 
-        function handleOrientation(event) {
-            if (!isScanning) return;
-            direction = event.alpha; // Use compass direction
+            undoButton.disabled = false;
+            saveButton.disabled = false;
         }
 
         startButton.addEventListener('click', () => {
-            if (!window.DeviceMotionEvent || !window.DeviceOrientationEvent) {
-                statusDiv.textContent = 'Error: Device sensors are not supported on this browser.';
+            if (!navigator.geolocation) {
+                statusDiv.textContent = 'Error: Geolocation is not supported by your browser.';
                 return;
             }
 
@@ -127,8 +131,12 @@
             stopButton.disabled = false;
             statusDiv.textContent = 'Status: Scanning...';
 
-            window.addEventListener('devicemotion', handleMotion);
-            window.addEventListener('deviceorientation', handleOrientation);
+            navigator.geolocation.watchPosition(handlePosition, (err) => {
+                console.error('Error fetching location:', err);
+            }, {
+                enableHighAccuracy: true,
+                maximumAge: 0
+            });
         });
 
         stopButton.addEventListener('click', () => {
@@ -136,11 +144,59 @@
             startButton.disabled = false;
             stopButton.disabled = true;
             statusDiv.textContent = 'Status: Stopped. Path data recorded.';
+        });
 
-            window.removeEventListener('devicemotion', handleMotion);
-            window.removeEventListener('deviceorientation', handleOrientation);
+        undoButton.addEventListener('click', () => {
+            if (undoStack.length > 0) {
+                const lastPoint = undoStack.pop();
+                redoStack.push(lastPoint);
 
-            console.log('Recorded Path:', path);
+                path.pop();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(canvas.width / 2 - 2, canvas.height / 2 - 2, 4, 4);
+
+                path.forEach((point, index) => {
+                    if (index > 0) {
+                        ctx.strokeStyle = 'black';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(path[index - 1].x, path[index - 1].y);
+                        ctx.lineTo(point.x, point.y);
+                        ctx.stroke();
+                    }
+                });
+            }
+
+            redoButton.disabled = redoStack.length === 0;
+            undoButton.disabled = undoStack.length === 0;
+        });
+
+        redoButton.addEventListener('click', () => {
+            if (redoStack.length > 0) {
+                const point = redoStack.pop();
+                undoStack.push(point);
+                path.push(point);
+
+                drawPath(point.x, point.y);
+            }
+
+            redoButton.disabled = redoStack.length === 0;
+            undoButton.disabled = undoStack.length === 0;
+        });
+
+        saveButton.addEventListener('click', () => {
+            const pathData = JSON.stringify(path);
+            const blob = new Blob([pathData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'path.json';
+            a.click();
+            URL.revokeObjectURL(url);
+
+            statusDiv.textContent = 'Status: Path data saved.';
         });
     </script>
 </body>
