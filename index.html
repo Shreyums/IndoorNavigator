@@ -105,11 +105,14 @@
         }
 
         function smoothCoordinates(lat, lon) {
-            if (path.length === 0) return { x: x + lon * 1000, y: y - lat * 1000 };
+            const scaleFactor = 10000; // Scales lat/lon changes to canvas pixels
+            if (path.length === 0) {
+                return { x: x + lon * scaleFactor, y: y - lat * scaleFactor };
+            }
 
             const lastPoint = path[path.length - 1];
-            const smoothX = lastPoint.x + (lon * 1000 - lastPoint.x) * 0.1;
-            const smoothY = lastPoint.y + (-lat * 1000 - lastPoint.y) * 0.1;
+            const smoothX = lastPoint.x + (lon * scaleFactor - lastPoint.x) * 0.1;
+            const smoothY = lastPoint.y + (-lat * scaleFactor - lastPoint.y) * 0.1;
 
             return { x: smoothX, y: smoothY };
         }
@@ -118,7 +121,7 @@
             if (!isScanning) return;
 
             const { latitude, longitude } = position.coords;
-            const smoothed = smoothCoordinates(latitude % 1, longitude % 1);
+            const smoothed = smoothCoordinates(latitude, longitude);
 
             drawPath(smoothed.x, smoothed.y);
             path.push({ x: smoothed.x, y: smoothed.y, latitude, longitude });
@@ -128,6 +131,8 @@
             undoButton.disabled = false;
             saveButton.disabled = false;
         }
+
+        let watchId = null;
 
         startButton.addEventListener('click', () => {
             if (!navigator.geolocation) {
@@ -140,11 +145,12 @@
             stopButton.disabled = false;
             statusDiv.textContent = 'Status: Scanning...';
 
-            navigator.geolocation.watchPosition(handlePosition, (err) => {
+            watchId = navigator.geolocation.watchPosition(handlePosition, (err) => {
                 console.error('Error fetching location:', err);
             }, {
                 enableHighAccuracy: true,
-                maximumAge: 0
+                maximumAge: 0,
+                timeout: 5000
             });
         });
 
@@ -153,6 +159,11 @@
             startButton.disabled = false;
             stopButton.disabled = true;
             statusDiv.textContent = 'Status: Stopped. Path data recorded.';
+
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
         });
 
         undoButton.addEventListener('click', () => {
